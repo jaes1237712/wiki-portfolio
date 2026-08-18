@@ -46,7 +46,8 @@ wiki-portfolio/
 │   └── tests/
 ├── docs/
 │   ├── roadmap.md      # 完整分階段計畫
-│   └── decisions.md    # 決策紀錄 + 待決事項
+│   ├── decisions.md    # 決策紀錄 + 待決事項
+│   └── legacy/         # 舊專案參考程式碼(唯讀)
 └── .github/workflows/  # 重量重算排程(Phase 10)
 ```
 
@@ -78,7 +79,7 @@ cp packages/db-schema/.env.example packages/db-schema/.env   # 填 Neon dev bran
 | Phase | 內容 | 狀態 |
 |---|---|---|
 | 0 | Repo 骨架、npm workspaces、shared-types、db-schema | ✅ 完成(Neon 專案尚未開) |
-| 1 | Pipeline:爬蟲 + 原始連結圖 | ⬜ 未開始 |
+| 1 | Pipeline:爬蟲 + 原始連結圖(BFS + SQLite checkpoint + 18 個測試) | 🟡 核心完成 |
 | 2 | Pipeline:建圖 + 邊權重 + 兩層社群偵測 | ⬜ 未開始 |
 | 3 | Pipeline:Workers AI embedding | ⬜ 未開始 |
 | 4 | Pipeline:寫入 Neon(**里程碑**,解鎖 5/6 平行開發) | ⬜ 未開始 |
@@ -90,7 +91,15 @@ cp packages/db-schema/.env.example packages/db-schema/.env   # 填 Neon dev bran
 | 10 | 排程重算 | ⬜ 未開始 |
 | 11 | 作品集包裝(首頁) | ⬜ 未開始 |
 
-**下一步:** 開 Neon 專案 + `dev` branch,跑 `npm run db:push` 把 schema 推上去;然後開始 Phase 1。
+**Phase 1 已完成的部分:** `wiki_pipeline/state.py`(SQLite checkpoint,取代舊版 5 個 JSON 快取檔)、
+`wiki_api.py`(async + 併發上限 + 退避重試 + 簡繁/redirect 標題收斂)、`scrape.py`(逐層 BFS、
+每批一個交易、可續傳、原子寫出 `wiki_network.json`)、`tests/`(respx 假 API,不打真的 Wikipedia)。
+已對真實 API 實測:`圖論` depth 1 → 299 節點 / 303 邊,續跑 0 次額外請求。
+
+**Phase 1 還沒做:** 條目簡介批次落庫(`fetch_extracts` 已寫好但還沒接成 stage)、瀏覽量抓取
+(日 + 半月兩種 granularity)。
+
+**下一步:** 開 Neon 專案 + `dev` branch → `npm run db:push`;或直接接 Phase 2(建圖 + 社群偵測)。
 
 ## 開發慣例
 
@@ -100,19 +109,15 @@ cp packages/db-schema/.env.example packages/db-schema/.env   # 填 Neon dev bran
 - **Embedding 模型**:`packages/db-schema/src/config.ts` 與 `pipeline/wiki_pipeline/config.py`
   兩處的模型/維度**必須一致**。改模型 = 重建 `nodes_passage_vector` + 重跑全部 embedding。
 - **註解語言**:繁體中文(與使用者一致),程式碼識別字用英文。
+- **繁簡**:zh 維基的正式標題簡繁混雜(「圖論」的實際頁面是「图论」)。API 一律帶
+  `converttitles=1` + `variant=zh-tw`,並在展開前用 `resolve_titles` 把標題收斂,否則同一條目
+  會變成兩個節點。**正式標題是圖的 ID,顯示用的繁體標題另外處理(尚未決定做法)。**
 - **測試**:pipeline 用 pytest(HTTP 用 respx 錄 fixture,不打真的 API);Worker 用 vitest;前端用 Playwright 煙霧測試。
 - **不要移植的東西**:多層社群子圖(舊版壞的)、GSAP 可拖曳版面、Cytoscape 渲染邏輯、
   `convert_graphml_to_json.py`(空函式)、Wikidata 標籤(v1 範圍外)。
 
-## 舊專案參考位置
+## 舊專案參考程式碼
 
-重寫的參考實作在**這個 repo 之外**(使用者本機 `c:/Users/User/wikiProject/`):
-
-- `wiki/data_factory/build_data.py` — 爬蟲(Phase 1 參考)
-- `wiki/data_factory/analyze.py` — 建圖、權重、社群偵測(Phase 2 參考)
-- `web_wiki/drizzle/schema.ts` — 舊 schema(已改編進 `packages/db-schema`)
-- `web_wiki/src/lib/server/python_api/analysis.py` — 異常偵測 / 線性回歸(Phase 5 要移植成 TS)
-- `web_wiki/src/lib/server/python_api/vector.py` — 向量搜尋 SQL(Phase 5 參考)
-- `web_wiki/src/routes/two_level_community_relation/+page.svelte` — 社群關係 UI(Phase 6 參考)
-
-⚠️ 換裝置時這些檔案不會跟著 repo 走。若要在其他裝置繼續參考,需要另外處理(見 decisions.md 的待決事項)。
+重寫的參考實作已複製進 [docs/legacy/](docs/legacy/)(唯讀,不要 import、不要改、不要跑),
+換裝置時跟著 repo 走。原始檔在使用者本機 `c:/Users/User/wikiProject/{wiki,web_wiki}/`。
+檔案對照與已知的坑見 [docs/legacy/README.md](docs/legacy/README.md)。

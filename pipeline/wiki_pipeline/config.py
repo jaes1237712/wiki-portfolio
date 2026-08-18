@@ -18,6 +18,10 @@ EMBEDDING_DIMENSIONS = 1024
 # --- 維基百科 API ------------------------------------------------------------
 WIKI_LANG = "zh"
 WIKI_API_URL = f"https://{WIKI_LANG}.wikipedia.org/w/api.php"
+# zh 維基的正式標題是簡繁混雜的(例如「圖論」的實際頁面標題是「图论」)。
+# variant + converttitles 讓 API 接受繁體輸入、並用繁體回內容;
+# 標題本身仍是正式(可能為簡體)標題,那是圖的穩定 ID,顯示用的繁體轉換另外處理。
+WIKI_VARIANT = "zh-tw"
 PAGEVIEWS_API_URL = "https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article"
 # 維基媒體要求可識別的 User-Agent(含聯絡方式),否則可能被限流。
 USER_AGENT = os.getenv(
@@ -66,7 +70,8 @@ class PipelineConfig:
 
 # --- 開發用小型 fixture 種子 --------------------------------------------------
 # 不是最終作品集主題,只是讓 Phase 1-6 有東西可以開發、不被「選主題」這個決策卡住。
-DEV_SEEDS = ["圖論", "網絡科學", "社群發現"]
+# 三個都實測存在於 zh 維基(「社群發現」不存在,已換成「複雜網絡」)。
+DEV_SEEDS = ["圖論", "網絡科學", "複雜網絡"]
 
 DEV_CONFIG = PipelineConfig(
     crawl=CrawlConfig(seeds=DEV_SEEDS, depth=2, concurrency=4),
