@@ -101,7 +101,12 @@ cp packages/db-schema/.env.example packages/db-schema/.env   # 填 Neon dev bran
 **Phase 1 還沒做:** 條目簡介批次落庫(`fetch_extracts` 已寫好但還沒接成 stage)、瀏覽量抓取
 (日 + 半月兩種 granularity)。
 
-**下一步:** 開 Neon 專案 + `dev` branch → `npm run db:push`;或直接接 Phase 2(建圖 + 社群偵測)。
+**Git 狀態:** 本機 repo(main branch)已有 3 個 commit,**還沒推到 GitHub**。
+已決定要開公開 repo;gh CLI 已安裝,缺 `gh auth login` 後執行
+`gh repo create wiki-portfolio --public --source=. --push`。
+
+**下一步:** 推上 GitHub → 開 Neon 專案 + `dev` branch → `npm run db:push`;
+或直接接 Phase 2(建圖 + 邊權重 + 兩層社群偵測)。
 
 ## 開發慣例
 
