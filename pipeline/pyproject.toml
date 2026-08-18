@@ -1,0 +1,41 @@
+[project]
+name = "wiki-pipeline"
+version = "0.1.0"
+description = "維基百科連結網絡的離線批次 pipeline:爬取 → 建圖 → 社群偵測 → embedding → 寫入 Neon"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.28",
+    "python-igraph>=0.11",
+    "infomap>=2.8",
+    "pandas>=2.2",
+    "numpy>=2.0",
+    "psycopg[binary]>=3.2",
+    "pgvector>=0.3",
+    "typer>=0.15",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.25",
+    "respx>=0.22",
+    "ruff>=0.9",
+]
+
+[project.scripts]
+pipeline = "wiki_pipeline.cli:app"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["wiki_pipeline*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

@@ -1,0 +1,23 @@
+{
+  "name": "wiki-portfolio",
+  "private": true,
+  "version": "0.1.0",
+  "description": "維基百科連結網絡分析作品集:Python 批次 pipeline → Neon/pgvector → Cloudflare Worker → React/Sigma.js",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "db:generate": "npm run generate -w @wiki/db-schema",
+    "db:push": "npm run push -w @wiki/db-schema"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
