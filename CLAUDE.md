@@ -80,7 +80,7 @@ cp packages/db-schema/.env.example packages/db-schema/.env   # 填 Neon dev bran
 |---|---|---|
 | 0 | Repo 骨架、npm workspaces、shared-types、db-schema | ✅ 完成(Neon 專案尚未開) |
 | 1 | Pipeline:爬蟲 + 原始連結圖(BFS + SQLite checkpoint + 20 個測試) | 🟡 核心完成 |
-| 2 | Pipeline:建圖 + 邊權重 + 兩層社群偵測 | ⬜ 未開始 |
+| 2 | Pipeline:建圖 + 邊權重 + 兩層社群偵測(35 個測試) | ✅ 完成 |
 | 3 | Pipeline:Workers AI embedding | ⬜ 未開始 |
 | 4 | Pipeline:寫入 Neon(**里程碑**,解鎖 5/6 平行開發) | ⬜ 未開始 |
 | 5 | 後端 Worker(Hono) | ⬜ 未開始 |
@@ -97,6 +97,12 @@ cp packages/db-schema/.env.example packages/db-schema/.env   # 填 Neon dev bran
 `zh.py`(OpenCC s2twp 顯示標題)。已對真實 API 實測:`圖論` depth 1 → 251 節點,
 標題正確收斂(`圖論`→正式標題 `图论`)且顯示標題轉成台灣繁體(`计算机科学`→`電腦科學`),
 續跑 0 次額外請求。
+
+**Phase 2 完成的部分:** `graph_build.py`(records → igraph 有向圖,去自環/重複邊)、
+`weighting.py`(拓樸相似度,**保留舊版非對稱性**,鄰居集合預先算好取代 O(E·deg) 重算)、
+`communities.py`(igraph 內建 Infomap 兩層社群、有效子圖、hub/authority/center/bridge
+特殊節點、社群關係 meta-graph)、`stages.py`(階段串接 + GraphML/JSON 中繼產物)。
+CLI:`pipeline run-stage graph` 與 `run-stage communities`。
 
 **Phase 1 還沒做:** 條目簡介批次落庫(`fetch_extracts` 已寫好但還沒接成 stage)、瀏覽量抓取
 (日 + 半月兩種 granularity)。

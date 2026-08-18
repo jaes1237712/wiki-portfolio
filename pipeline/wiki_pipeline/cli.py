@@ -14,6 +14,7 @@ import typer
 
 from . import config as cfg
 from .scrape import run_scrape
+from .stages import run_communities_stage, run_graph_stage
 from .state import StateStore
 
 app = typer.Typer(help="維基百科連結網絡 pipeline", no_args_is_help=True)
@@ -54,6 +55,8 @@ def run_stage(
         level=logging.INFO if verbose else logging.WARNING,
         format="%(asctime)s %(levelname)s %(message)s",
     )
+    # httpx 每個請求都會印一行 INFO,大規模爬取時會把真正的進度訊息淹掉
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     conf = _build_config(list(seed) if seed else None, depth, concurrency)
 
     if stage == "scrape":
@@ -63,6 +66,25 @@ def run_stage(
             f"共 {stats.articles} 節點 / {stats.links} 邊,耗時 {stats.elapsed_seconds:.1f} 秒"
         )
         typer.echo(f"輸出:{conf.output_dir / 'wiki_network.json'}")
+        return
+
+    if stage == "graph":
+        graph = run_graph_stage(conf)
+        typer.echo(f"完成:{graph.vcount()} 節點 / {graph.ecount()} 邊,已加上拓樸相似度權重")
+        typer.echo(f"輸出:{conf.output_dir / 'graph.graphml'}")
+        return
+
+    if stage == "communities":
+        artifacts = run_communities_stage(conf)
+        typer.echo(
+            f"完成:{len(artifacts.detection.community_sizes)} 個社群"
+            f"(codelength {artifacts.detection.codelength:.4f}),"
+            f"其中 {len(artifacts.subgraphs)} 個有效社群"
+        )
+        typer.echo(
+            f"社群關係圖:{artifacts.relation.vcount()} 頂點 / {artifacts.relation.ecount()} 邊"
+        )
+        typer.echo(f"輸出:{conf.output_dir / 'communities.json'} 等")
         return
 
     raise NotImplementedError(f"{STAGES[stage]} 尚未實作")

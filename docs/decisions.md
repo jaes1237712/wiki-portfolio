@@ -70,6 +70,22 @@ zh 維基的正式頁面標題簡繁混雜(「圖論」的實際頁面是「图�
 選 pipeline 端而不是前端轉換:前端要多載一份字典、上千個節點每次渲染都要轉;
 pipeline 只在爬取時轉一次,而且搜尋時兩種寫法都能比對。
 
+### 13. Phase 2 用 igraph 內建的 `community_infomap`,不裝 infomap 套件
+舊版 `analyze.py` import 了 `infomap`,但實際跑的是 `G.community_infomap()`(igraph 內建)。
+新版照做,少一個原生依賴,GitHub Actions 的重算 workflow 也少一個編譯風險。
+
+### 14. meta-graph 不建「沒有連結」的社群配對邊
+舊版對所有社群兩兩建邊,沒有跨社群連結的邊 `connections_num=0`、`distance=inf`。
+這種邊會讓加權 pagerank(權重 0)與加權 betweenness(權重 inf)失去意義,
+而且對前端只是雜訊。新版只建 `connections_num > 0` 的邊;center 之間在有向圖上走不到時,
+distance 給「最遠有限距離 + 1」而不是 inf。資訊等價,數值可用。
+
+### 15. 主畫面的「拓樸圖」= 社群關係 meta-graph
+沿用舊版的資訊架構:主畫面不是整張連結圖(太大),而是每個有效社群 4 個特殊節點
+(hub / authority / center / bridge)構成的關係圖,點進社群才看該社群的子圖。
+⚠️ 這件事與 `packages/db-schema` 目前的 `topology_nodes` 註解(寫成「全圖節點」)不一致,
+Phase 4 要一起處理,見待決事項 H。
+
 ## 待決事項
 
 | # | 待決 | 何時需要 | 現況 |
@@ -80,4 +96,5 @@ pipeline 只在爬取時轉一次,而且搜尋時兩種寫法都能比對。
 | ~~D~~ | GitHub repo 公開還是私有 | — | ✅ 已決:公開(Actions 分鐘數免費無上限) |
 | E | 首頁是否放個人聯絡資訊 | Phase 11 | 未決 |
 | F | 是否要做 Wikidata 標籤功能 | v1 之後 | 目前排除在 v1 外 |
+| H | `topology_nodes/edges` 到底存 meta-graph 還是全圖(名稱與註解要跟著改) | Phase 4 寫入 Neon 前 | 未決,傾向存 meta-graph 並改名 `community_relation_*` |
 | ~~G~~ | 顯示用的繁體標題怎麼產生 | — | ✅ 已決:pipeline 端 OpenCC `s2twp` → `nodes.title_display`(見決策 12) |
