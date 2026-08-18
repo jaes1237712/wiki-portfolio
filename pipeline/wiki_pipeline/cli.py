@@ -44,7 +44,11 @@ def _build_config(seeds: list[str] | None, depth: int | None, concurrency: int |
         depth=depth or base.crawl.depth,
         concurrency=concurrency or base.crawl.concurrency,
     )
-    return dataclasses.replace(base, crawl=crawl)
+    # --concurrency 對每個抓取階段都要生效,不然瀏覽量階段會默默用預設值
+    pageviews = dataclasses.replace(
+        base.pageviews, concurrency=concurrency or base.pageviews.concurrency
+    )
+    return dataclasses.replace(base, crawl=crawl, pageviews=pageviews)
 
 
 @app.command("run-stage")
