@@ -27,3 +27,6 @@
 - `analyze.py` 的多層社群子圖(`config_G_list_multi_level_subgraphs`)是壞的,**不移植**。
 - `vector.py` 第 17 行原本有寫死的本機 DB 連線字串(含密碼),**複製進來時已塗掉**。
 - `vector.py` 的 `top_k` 參數被忽略、SQL 寫死 `LIMIT 50`,重寫時要修。
+- `build_data.py` 的 `get_articles_extracts` 用 `batch_size=50` 抓導言,但 MediaWiki 的
+  TextExtracts **每個請求最多只回 20 筆**(不管 `exlimit` 給多少),超過的部分不會報錯、
+  只是靜靜地沒有 extract 欄位 —— 也就是說舊版有 60% 的條目根本沒抓到簡介。新版批次改成 20。
