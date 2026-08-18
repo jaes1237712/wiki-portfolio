@@ -2,7 +2,9 @@
 
 每個階段都會把中繼產物寫進 `output/`,下一個階段可以直接讀,不必重跑上一階段:
 
-    scrape       → output/wiki_network.json          (Phase 1)
+    scrape       → output/wiki_network.json          (Phase 1:連結圖)
+    extracts     → state 的 extracts 表               (Phase 1:條目簡介)
+    pageviews    → state 的 pageviews 表              (Phase 1:每日瀏覽量)
     graph        → output/graph.graphml              (Phase 2a+2b:建圖 + 邊權重)
     communities  → output/community_relation.graphml (Phase 2c:社群偵測 + 子圖 + 特殊節點)
                    output/subgraphs/community_<id>.graphml
@@ -14,6 +16,7 @@ GraphML 沿用舊版當除錯用中繼格式:即使最終資料是進 Postgres,�
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass
@@ -31,6 +34,8 @@ from .communities import (
     mark_special_nodes,
 )
 from .config import PipelineConfig
+from .pageviews import average_pageviews, to_half_month
+from .wiki_api import WikiApiError, WikiClient
 from .graph_build import build_graph_from_store, load_records, build_graph
 from .state import StateStore
 from .weighting import assign_topology_weights
@@ -140,3 +145,139 @@ def write_community_artifacts(artifacts: CommunityArtifacts, output_dir: Path) -
     )
     written.append(summary_path)
     return written
+
+
+# --- Phase 1 的其餘階段 -----------------------------------------------------
+
+
+@dataclass
+class ExtractsStats:
+    fetched: int = 0
+    missing: int = 0
+    total: int = 0
+
+
+async def run_extracts_stage(config: PipelineConfig, batch_size: int = 50) -> ExtractsStats:
+    """抓所有條目的導言文字(Phase 3 的 embedding 與前端的詳情面板都要用)。
+
+    可續傳:只抓 `extracts` 表裡還沒有的條目。查不到簡介的條目會寫入 NULL,
+    代表「問過了、沒有」,下次不會再問一遍。
+    """
+    stats = ExtractsStats()
+    with StateStore(config.state_dir / "pipeline.sqlite") as store:
+        pending = store.missing_extracts()
+        stats.total = len(pending)
+        if not pending:
+            log.info("所有條目都已經有簡介了")
+            return stats
+
+        # 每批 50 個標題(API 上限),再讓多批同時飛,否則 13,000 個條目要跑十幾分鐘
+        batches = [pending[i : i + batch_size] for i in range(0, len(pending), batch_size)]
+        group_size = config.crawl.concurrency
+        async with WikiClient(concurrency=config.crawl.concurrency) as client:
+            for group_start in range(0, len(batches), group_size):
+                group = batches[group_start : group_start + group_size]
+                results = await asyncio.gather(
+                    *(client.fetch_extracts([title for _, title in batch]) for batch in group),
+                    return_exceptions=True,
+                )
+                with store.transaction():
+                    for batch, extracts in zip(group, results, strict=True):
+                        if isinstance(extracts, BaseException):
+                            if isinstance(extracts, (WikiApiError, OSError)):
+                                log.warning("抓簡介失敗(%d 個條目),稍後可續跑:%s", len(batch), extracts)
+                                continue
+                            raise extracts
+                        for idx, title in batch:
+                            text = extracts.get(title)
+                            store.set_extract(idx, text)
+                            if text:
+                                stats.fetched += 1
+                            else:
+                                stats.missing += 1
+                done = min((group_start + group_size) * batch_size, len(pending))
+                log.info("簡介進度:%d/%d", done, len(pending))
+    return stats
+
+
+@dataclass
+class PageviewsStats:
+    fetched: int = 0
+    empty: int = 0
+    failed: int = 0
+    rows: int = 0
+    total: int = 0
+
+
+async def run_pageviews_stage(
+    config: PipelineConfig, limit: int | None = None, today=None
+) -> PageviewsStats:
+    """抓每日瀏覽量。可續傳:只抓還沒抓過(或上次失敗)的條目。"""
+    start_date, end_date = config.pageviews.date_range(today)
+    stats = PageviewsStats()
+
+    with StateStore(config.state_dir / "pipeline.sqlite") as store:
+        pending = store.articles_missing_pageviews(start_date, end_date, limit=limit)
+        stats.total = len(pending)
+        if not pending:
+            log.info("所有條目都已經抓過 %s~%s 的瀏覽量了", start_date, end_date)
+            return stats
+        log.info("要抓 %d 個條目的瀏覽量(%s~%s)", len(pending), start_date, end_date)
+
+        batch_size = config.pageviews.concurrency * 4
+        async with WikiClient(concurrency=config.pageviews.concurrency) as client:
+            for start in range(0, len(pending), batch_size):
+                batch = pending[start : start + batch_size]
+                results = await asyncio.gather(
+                    *(
+                        client.fetch_pageviews(title, start_date, end_date)
+                        for _, title in batch
+                    ),
+                    return_exceptions=True,
+                )
+                with store.transaction():
+                    for (idx, title), result in zip(batch, results, strict=True):
+                        if isinstance(result, BaseException):
+                            if isinstance(result, (WikiApiError, OSError)):
+                                store.mark_pageviews_failed(idx, start_date, end_date, str(result))
+                                stats.failed += 1
+                                continue
+                            raise result
+                        if result:
+                            store.set_pageviews(idx, result)
+                            stats.rows += len(result)
+                            stats.fetched += 1
+                        else:
+                            stats.empty += 1
+                        store.mark_pageviews_done(idx, start_date, end_date)
+                log.info(
+                    "瀏覽量進度:%d/%d(累計 %d 筆日資料)",
+                    start + len(batch),
+                    len(pending),
+                    stats.rows,
+                )
+    return stats
+
+
+def pageviews_summary(config: PipelineConfig, sample: int = 5) -> dict:
+    """把每日資料彙總成半月 + 平均,寫出 output/pageviews_summary.json 供人工檢查。"""
+    with StateStore(config.state_dir / "pipeline.sqlite") as store:
+        rows = []
+        for idx, _title, display in list(store.iter_articles_full())[:sample]:
+            daily = store.get_pageviews(idx)
+            rows.append(
+                {
+                    "idx": idx,
+                    "title": display,
+                    "days": len(daily),
+                    "average": round(average_pageviews(daily), 2),
+                    "half_month": to_half_month(daily)[-4:],
+                }
+            )
+        summary = {"total_daily_rows": store.pageview_count(), "sample": rows}
+
+    config.output_dir.mkdir(parents=True, exist_ok=True)
+    (config.output_dir / "pageviews_summary.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return summary

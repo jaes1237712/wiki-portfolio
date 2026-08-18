@@ -59,6 +59,23 @@ CREATE TABLE IF NOT EXISTS extracts (
     extract TEXT
 );
 
+-- 每日瀏覽量。半月彙總是從這裡算出來的,不另外打 API。
+CREATE TABLE IF NOT EXISTS pageviews (
+    idx   INTEGER NOT NULL,
+    date  TEXT NOT NULL,
+    views INTEGER NOT NULL,
+    PRIMARY KEY (idx, date)
+) WITHOUT ROWID;
+
+-- 每個條目抓過哪一段期間,續傳時才知道誰還沒抓、誰抓失敗。
+CREATE TABLE IF NOT EXISTS pageview_status (
+    idx        INTEGER PRIMARY KEY,
+    start_date TEXT NOT NULL,
+    end_date   TEXT NOT NULL,
+    status     TEXT NOT NULL,
+    error      TEXT
+);
+
 CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -260,6 +277,66 @@ class StateStore:
             "LEFT JOIN extracts e ON e.idx = a.idx WHERE e.idx IS NULL ORDER BY a.idx"
         )
         return [(int(r["idx"]), str(r["title"])) for r in rows]
+
+    # --- 瀏覽量 -----------------------------------------------------------
+
+    def set_pageviews(self, idx: int, points: Iterable[tuple[str, int]]) -> None:
+        """寫入某個條目的每日瀏覽量(同日重抓會覆蓋)。"""
+        self.conn.executemany(
+            "INSERT INTO pageviews (idx, date, views) VALUES (?, ?, ?) "
+            "ON CONFLICT(idx, date) DO UPDATE SET views = excluded.views",
+            ((idx, date, views) for date, views in points),
+        )
+
+    def mark_pageviews_done(self, idx: int, start_date: str, end_date: str) -> None:
+        self._set_pageview_status(idx, start_date, end_date, "done", None)
+
+    def mark_pageviews_failed(self, idx: int, start_date: str, end_date: str, error: str) -> None:
+        self._set_pageview_status(idx, start_date, end_date, "failed", error)
+
+    def _set_pageview_status(
+        self, idx: int, start_date: str, end_date: str, status: str, error: str | None
+    ) -> None:
+        self.conn.execute(
+            "INSERT INTO pageview_status (idx, start_date, end_date, status, error) "
+            "VALUES (?, ?, ?, ?, ?) ON CONFLICT(idx) DO UPDATE SET "
+            "start_date = excluded.start_date, end_date = excluded.end_date, "
+            "status = excluded.status, error = excluded.error",
+            (idx, start_date, end_date, status, error),
+        )
+
+    def articles_missing_pageviews(
+        self, start_date: str, end_date: str, limit: int | None = None
+    ) -> list[tuple[int, str]]:
+        """還沒抓過這段期間的條目(含上次失敗的,失敗多半是暫時性的)。"""
+        sql = (
+            "SELECT a.idx, a.title FROM articles a "
+            "LEFT JOIN pageview_status s ON s.idx = a.idx "
+            "WHERE s.idx IS NULL OR s.status != 'done' "
+            "   OR s.start_date > ? OR s.end_date < ? "
+            "ORDER BY a.idx"
+        )
+        params: tuple[object, ...] = (start_date, end_date)
+        if limit is not None:
+            sql += " LIMIT ?"
+            params += (limit,)
+        return [(int(r["idx"]), str(r["title"])) for r in self.conn.execute(sql, params)]
+
+    def get_pageviews(self, idx: int) -> list[tuple[str, int]]:
+        rows = self.conn.execute(
+            "SELECT date, views FROM pageviews WHERE idx = ? ORDER BY date", (idx,)
+        )
+        return [(str(r["date"]), int(r["views"])) for r in rows]
+
+    def pageview_count(self) -> int:
+        row = self.conn.execute("SELECT count(*) AS n FROM pageviews").fetchone()
+        return int(row["n"])
+
+    def pageview_status_counts(self) -> dict[str, int]:
+        rows = self.conn.execute(
+            "SELECT status, count(*) AS n FROM pageview_status GROUP BY status"
+        )
+        return {str(r["status"]): int(r["n"]) for r in rows}
 
     # --- meta -------------------------------------------------------------
 

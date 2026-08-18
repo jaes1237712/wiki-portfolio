@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 from pathlib import Path
 
 # --- Embedding ---------------------------------------------------------------
@@ -23,6 +24,10 @@ WIKI_API_URL = f"https://{WIKI_LANG}.wikipedia.org/w/api.php"
 # 標題本身仍是正式(可能為簡體)標題,那是圖的穩定 ID,顯示用的繁體轉換另外處理。
 WIKI_VARIANT = "zh-tw"
 PAGEVIEWS_API_URL = "https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article"
+# 專案代號、訪問類型、代理人:沿用舊版設定(只算真人瀏覽,不含機器人)。
+PAGEVIEWS_PROJECT = "zh.wikipedia"
+PAGEVIEWS_ACCESS = "all-access"
+PAGEVIEWS_AGENT = "user"
 # 維基媒體要求可識別的 User-Agent(含聯絡方式),否則可能被限流。
 USER_AGENT = os.getenv(
     "WIKI_USER_AGENT",
@@ -61,9 +66,31 @@ class CommunityConfig:
 
 
 @dataclass(frozen=True)
+class PageviewsConfig:
+    """瀏覽量抓取範圍。
+
+    一律抓「每日」資料,半月彙總在本地算(舊版只抓 monthly,拿不到日資料就做不了
+    每日異常偵測)。天數直接決定資料量:13,000 個條目 × 365 天 ≈ 475 萬筆。
+    """
+
+    days: int = 365
+    # Pageviews API 的資料大約落後一天,所以預設不抓到今天。
+    lag_days: int = 2
+    # 一次同時抓幾個條目
+    concurrency: int = 6
+
+    def date_range(self, today: date | None = None) -> tuple[str, str]:
+        """回傳 (start, end),格式 YYYYMMDD。"""
+        end = (today or date.today()) - timedelta(days=self.lag_days)
+        start = end - timedelta(days=self.days - 1)
+        return start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
+
+
+@dataclass(frozen=True)
 class PipelineConfig:
     crawl: CrawlConfig
     community: CommunityConfig = field(default_factory=CommunityConfig)
+    pageviews: PageviewsConfig = field(default_factory=PageviewsConfig)
     output_dir: Path = OUTPUT_DIR
     state_dir: Path = STATE_DIR
 

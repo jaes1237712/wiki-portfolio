@@ -79,7 +79,7 @@ cp packages/db-schema/.env.example packages/db-schema/.env   # 填 Neon dev bran
 | Phase | 內容 | 狀態 |
 |---|---|---|
 | 0 | Repo 骨架、npm workspaces、shared-types、db-schema | ✅ 完成(Neon 專案尚未開) |
-| 1 | Pipeline:爬蟲 + 原始連結圖(BFS + SQLite checkpoint + 20 個測試) | 🟡 核心完成 |
+| 1 | Pipeline:爬蟲 + 連結圖 + 條目簡介 + 每日瀏覽量 | ✅ 完成 |
 | 2 | Pipeline:建圖 + 邊權重 + 兩層社群偵測(36 個測試) | ✅ 完成 |
 | 3 | Pipeline:Workers AI embedding | ⬜ 未開始 |
 | 4 | Pipeline:寫入 Neon(**里程碑**,解鎖 5/6 平行開發) | ⬜ 未開始 |
@@ -107,8 +107,10 @@ CLI:`pipeline run-stage graph` 與 `run-stage communities`。
 meta-graph 43 頂點 / 85 邊。分群結果合理(線性代數↔行列式、群論↔抽象代數、
 戴克斯特拉演算法↔最小生成樹)。**社群偵測固定亂數種子**,否則每次重算社群編號都會變。
 
-**Phase 1 還沒做:** 條目簡介批次落庫(`fetch_extracts` 已寫好但還沒接成 stage)、瀏覽量抓取
-(日 + 半月兩種 granularity)。
+**Phase 1 補完的部分:** `run-stage extracts`(批次抓導言,查不到的寫 NULL 代表「問過了」)、
+`run-stage pageviews`(每日瀏覽量,可續傳,失敗自動重抓)、`pageviews.py`(半月彙總、
+平均、社群加總都在本地算,不另外打 API)。**只抓每日**資料,半月是本地彙總出來的 ——
+舊版只抓 monthly,連每日異常偵測都做不了。
 
 **Git 狀態:** 公開 repo → https://github.com/jaes1237712/wiki-portfolio
 (main branch,remote 走 SSH)。換裝置直接 `git clone git@github.com:jaes1237712/wiki-portfolio.git`。

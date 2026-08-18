@@ -11,6 +11,8 @@ import random
 from dataclasses import dataclass, field
 from types import TracebackType
 
+from urllib.parse import quote
+
 import httpx
 
 from . import config as cfg
@@ -198,6 +200,56 @@ class WikiClient:
             continue_params["continue"] = cont["continue"]
 
         return result
+
+    # --- 瀏覽量 -----------------------------------------------------------
+
+    async def fetch_pageviews(
+        self, title: str, start: str, end: str, granularity: str = "daily"
+    ) -> list[tuple[str, int]]:
+        """抓某個條目的瀏覽量歷史,回傳 [(YYYY-MM-DD, views), ...]。
+
+        改寫自舊版 `get_pageviewHistory`,差別:
+        - 預設抓「每日」而不是每月(沒有日資料就做不了每日異常偵測)
+        - 404 代表這個條目在該期間沒有資料(常見:新條目),回空清單而不是當成錯誤
+        - 走與其他請求相同的 semaphore 與退避重試
+        """
+        path = "/".join(
+            [
+                cfg.PAGEVIEWS_PROJECT,
+                cfg.PAGEVIEWS_ACCESS,
+                cfg.PAGEVIEWS_AGENT,
+                quote(title.replace(" ", "_"), safe=""),
+                granularity,
+                start,
+                end,
+            ]
+        )
+        url = f"{cfg.PAGEVIEWS_API_URL}/{path}"
+
+        last_error: Exception | None = None
+        for attempt in range(self.max_retries):
+            async with self._sem:
+                try:
+                    resp = await self._client.get(url)
+                except httpx.HTTPError as exc:
+                    last_error = exc
+                else:
+                    if resp.status_code == 200:
+                        return [
+                            (
+                                f"{item['timestamp'][:4]}-{item['timestamp'][4:6]}-"
+                                f"{item['timestamp'][6:8]}",
+                                int(item.get("views", 0)),
+                            )
+                            for item in resp.json().get("items", [])
+                        ]
+                    if resp.status_code == 404:
+                        return []
+                    if resp.status_code not in (429, 500, 502, 503, 504):
+                        raise WikiApiError(f"HTTP {resp.status_code}: {resp.text[:200]}")
+                    last_error = WikiApiError(f"HTTP {resp.status_code}")
+            await asyncio.sleep(min(2**attempt, 30) * (0.5 + random.random()))
+        raise WikiApiError(f"{self.max_retries} 次重試後仍失敗") from last_error
 
     # --- 條目簡介 ---------------------------------------------------------
 

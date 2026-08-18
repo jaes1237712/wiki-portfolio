@@ -14,13 +14,21 @@ import typer
 
 from . import config as cfg
 from .scrape import run_scrape
-from .stages import run_communities_stage, run_graph_stage
+from .stages import (
+    pageviews_summary,
+    run_communities_stage,
+    run_extracts_stage,
+    run_graph_stage,
+    run_pageviews_stage,
+)
 from .state import StateStore
 
 app = typer.Typer(help="維基百科連結網絡 pipeline", no_args_is_help=True)
 
 STAGES = {
     "scrape": "Phase 1 — 爬取連結圖",
+    "extracts": "Phase 1 — 抓條目簡介",
+    "pageviews": "Phase 1 — 抓每日瀏覽量",
     "graph": "Phase 2 — 建圖 + 邊權重",
     "communities": "Phase 2 — 兩層社群偵測",
     "embed": "Phase 3 — Workers AI embedding",
@@ -45,6 +53,7 @@ def run_stage(
     seed: list[str] = typer.Option(None, "--seed", help="種子條目(可重複);預設用 DEV_SEEDS"),
     depth: int = typer.Option(None, help="要展開的層數"),
     concurrency: int = typer.Option(None, help="同時發出的請求數上限"),
+    limit: int = typer.Option(None, help="只處理前 N 個條目(pageviews 階段試跑用)"),
     verbose: bool = typer.Option(True, help="顯示進度 log"),
 ) -> None:
     """執行單一階段。"""
@@ -66,6 +75,26 @@ def run_stage(
             f"共 {stats.articles} 節點 / {stats.links} 邊,耗時 {stats.elapsed_seconds:.1f} 秒"
         )
         typer.echo(f"輸出:{conf.output_dir / 'wiki_network.json'}")
+        return
+
+    if stage == "extracts":
+        stats = asyncio.run(run_extracts_stage(conf))
+        typer.echo(
+            f"完成:{stats.fetched} 個條目有簡介,{stats.missing} 個查不到"
+            f"(共處理 {stats.total} 個)"
+        )
+        return
+
+    if stage == "pageviews":
+        stats = asyncio.run(run_pageviews_stage(conf, limit=limit))
+        start_date, end_date = conf.pageviews.date_range()
+        typer.echo(
+            f"完成:{stats.fetched} 個條目有資料、{stats.empty} 個沒有、{stats.failed} 個失敗"
+            f"(共 {stats.total} 個),寫入 {stats.rows} 筆日資料({start_date}~{end_date})"
+        )
+        summary = pageviews_summary(conf)
+        typer.echo(f"資料庫累計 {summary['total_daily_rows']} 筆日資料")
+        typer.echo(f"輸出:{conf.output_dir / 'pageviews_summary.json'}")
         return
 
     if stage == "graph":
