@@ -24,10 +24,17 @@ import {
 } from 'drizzle-orm/pg-core';
 import { EMBEDDING_DIMENSIONS } from './config.js';
 
-/** 條目本體。idx 是 pipeline 產生的穩定整數 ID(非 Wikipedia pageid)。 */
+/**
+ * 條目本體。idx 是 pipeline 產生的穩定整數 ID(非 Wikipedia pageid)。
+ *
+ * `title` 是維基的正式標題(zh 維基簡繁混雜,例如「圖論」的正式標題是「图论」),
+ * 拿來組維基連結;`title_display` 是 pipeline 用 OpenCC(s2twp)轉出的台灣繁體,
+ * 前端顯示一律用它。
+ */
 export const nodes = pgTable('nodes', {
   idx: integer('idx').primaryKey().notNull(),
   title: text('title').notNull(),
+  titleDisplay: text('title_display').notNull(),
   introduction: text('introduction'),
   averagePageviews: real('average_pageviews'),
 });
@@ -201,7 +208,7 @@ export const topologyViewNodes = pgView('topology_view_nodes', {
   hub: doublePrecision('hub'),
   averagePageviews: real('average_pageviews'),
 }).as(
-  sql`SELECT t.idx, n.title, t.community, t.pagerank, t.betweenness, t.authority, t.hub, n.average_pageviews
+  sql`SELECT t.idx, n.title_display AS title, t.community, t.pagerank, t.betweenness, t.authority, t.hub, n.average_pageviews
       FROM topology_nodes t JOIN nodes n ON t.idx = n.idx
       ORDER BY t.pagerank DESC`,
 );

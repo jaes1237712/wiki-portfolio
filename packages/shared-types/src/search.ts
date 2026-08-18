@@ -2,7 +2,10 @@
 
 export interface SearchResult {
   idx: number;
+  /** 顯示用的台灣繁體標題。 */
   title: string;
+  /** 維基的正式標題,用來組維基連結。 */
+  canonicalTitle: string;
   introduction: string | null;
   community: number;
   /** 1 - cosine distance,越大越相似。 */

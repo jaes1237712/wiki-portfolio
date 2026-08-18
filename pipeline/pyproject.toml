@@ -13,6 +13,7 @@ dependencies = [
     "pgvector>=0.3",
     "typer>=0.15",
     "python-dotenv>=1.0",
+    "opencc-python-reimplemented>=0.1.7",
 ]
 
 [project.optional-dependencies]

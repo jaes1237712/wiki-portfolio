@@ -19,12 +19,16 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Literal
 
+from .zh import to_traditional
+
 CrawlStatus = Literal["pending", "done", "failed"]
 
 _SCHEMA = """
+-- title 是維基的正式標題(圖的穩定 ID);title_display 是 OpenCC 轉出的台灣繁體顯示標題。
 CREATE TABLE IF NOT EXISTS articles (
-    idx   INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL UNIQUE
+    idx           INTEGER PRIMARY KEY AUTOINCREMENT,
+    title         TEXT NOT NULL UNIQUE,
+    title_display TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS links (
@@ -104,7 +108,10 @@ class StateStore:
         row = self.conn.execute("SELECT idx FROM articles WHERE title = ?", (title,)).fetchone()
         if row is not None:
             return int(row["idx"])
-        cur = self.conn.execute("INSERT INTO articles (title) VALUES (?)", (title,))
+        cur = self.conn.execute(
+            "INSERT INTO articles (title, title_display) VALUES (?, ?)",
+            (title, to_traditional(title)),
+        )
         return int(cur.lastrowid)
 
     def add_articles(self, titles: Iterable[str]) -> dict[str, int]:
@@ -120,8 +127,21 @@ class StateStore:
         return int(row["n"])
 
     def iter_articles(self) -> Iterator[tuple[int, str]]:
+        """(idx, 正式標題)。要顯示標題請用 `iter_articles_full`。"""
         for row in self.conn.execute("SELECT idx, title FROM articles ORDER BY idx"):
             yield int(row["idx"]), str(row["title"])
+
+    def iter_articles_full(self) -> Iterator[tuple[int, str, str]]:
+        """(idx, 正式標題, 顯示標題)。"""
+        rows = self.conn.execute("SELECT idx, title, title_display FROM articles ORDER BY idx")
+        for row in rows:
+            yield int(row["idx"]), str(row["title"]), str(row["title_display"])
+
+    def get_display_title(self, title: str) -> str | None:
+        row = self.conn.execute(
+            "SELECT title_display FROM articles WHERE title = ?", (title,)
+        ).fetchone()
+        return None if row is None else str(row["title_display"])
 
     # --- 連結 -------------------------------------------------------------
 

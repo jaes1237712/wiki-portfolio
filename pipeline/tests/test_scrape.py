@@ -201,7 +201,9 @@ def test_export_json_keeps_legacy_shape(store: StateStore, tmp_path) -> None:
     records = json.loads(path.read_text(encoding="utf-8"))
 
     assert {r["Title"] for r in records} == {"圖論", "網絡科學", "演算法", "拓撲學"}
-    assert set(records[0]) == {"Index", "Title", "Directed_Index"}
+    assert set(records[0]) == {"Index", "Title", "Title_Display", "Directed_Index"}
+    # 顯示標題是 OpenCC 轉出的台灣繁體(這裡 fixture 本來就是繁體,轉換後不變)
+    assert all(r["Title_Display"] for r in records)
     all_indices = {r["Index"] for r in records}
     for record in records:
         # 不能有指向資料集之外的 Directed_Index

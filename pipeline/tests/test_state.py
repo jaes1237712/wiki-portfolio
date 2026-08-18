@@ -92,3 +92,18 @@ def test_missing_extracts_lists_only_unfetched(store: StateStore) -> None:
     store.set_extract(a, "圖論是數學的一個分支。")
     assert [t for _, t in store.missing_extracts()] == ["網絡科學"]
     assert store.get_extract(a).startswith("圖論")
+
+
+def test_display_title_is_converted_to_taiwan_traditional(store: StateStore) -> None:
+    """正式標題原樣保留當 ID,顯示標題轉成台灣繁體。"""
+    store.add_article("图论")
+    store.add_article("网络科学")
+    assert store.get_display_title("图论") == "圖論"
+    assert store.get_display_title("网络科学") == "網路科學"
+    # 正式標題不能被動到,否則組出來的維基連結會失效
+    assert {t for _, t in store.iter_articles()} == {"图论", "网络科学"}
+
+
+def test_display_title_conversion_is_idempotent(store: StateStore) -> None:
+    store.add_article("圖論")
+    assert store.get_display_title("圖論") == "圖論"

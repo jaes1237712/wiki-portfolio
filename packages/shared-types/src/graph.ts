@@ -9,6 +9,7 @@ export type CommunityId = number;
 /** 拓樸圖節點:主畫面整張圖的一個條目。 */
 export interface TopologyNode {
   idx: NodeIdx;
+  /** 顯示用的台灣繁體標題(pipeline 端用 OpenCC 轉好的)。 */
   title: string;
   community: CommunityId;
   /** 節點大小依此值縮放。 */
@@ -64,7 +65,10 @@ export interface CommunitySubgraph {
 /** 節點詳情面板需要的條目內容。 */
 export interface NodeDetail {
   idx: NodeIdx;
+  /** 顯示用的台灣繁體標題。 */
   title: string;
+  /** 維基的正式標題,用來組 https://zh.wikipedia.org/wiki/<canonicalTitle> 連結。 */
+  canonicalTitle: string;
   introduction: string | null;
   community: CommunityId;
   averagePageviews: number | null;

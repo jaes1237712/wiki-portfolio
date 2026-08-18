@@ -172,7 +172,7 @@ async def crawl(
 
 
 def export_network_json(store: StateStore, path: Path | str) -> Path:
-    """輸出 `wiki_network.json`(維持舊版 Index / Title / Directed_Index 結構)。
+    """輸出 `wiki_network.json`(沿用舊版 Index / Title / Directed_Index,多一個顯示標題欄)。
 
     原子寫入:先寫暫存檔再 `os.replace`,取代舊版的 `safe_write_json`,
     避免寫到一半被中斷留下壞掉的 JSON。
@@ -180,8 +180,13 @@ def export_network_json(store: StateStore, path: Path | str) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     records = [
-        {"Index": idx, "Title": title, "Directed_Index": store.outgoing(idx)}
-        for idx, title in store.iter_articles()
+        {
+            "Index": idx,
+            "Title": title,
+            "Title_Display": display,
+            "Directed_Index": store.outgoing(idx),
+        }
+        for idx, title, display in store.iter_articles_full()
     ]
     tmp = path.with_suffix(path.suffix + ".tmp")
     with tmp.open("w", encoding="utf-8") as f:
