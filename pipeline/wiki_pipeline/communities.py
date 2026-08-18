@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import logging
+import random
 from dataclasses import dataclass, field
 
 import igraph as ig
@@ -30,6 +31,9 @@ import numpy as np
 from .config import CommunityConfig
 
 log = logging.getLogger(__name__)
+
+#: 社群偵測的預設亂數種子,讓每次重算的社群編號可重現。
+DEFAULT_SEED = 20260818
 
 #: 每個有效社群都會標出這四個角色。
 ROLES = ("hub", "authority", "center", "bridge")
@@ -72,8 +76,17 @@ class SpecialNodes:
     roles: dict[str, int]
 
 
-def detect_communities(graph: ig.Graph, trials: int = 5) -> CommunityDetection:
-    """跑 Infomap(igraph 內建)兩層社群偵測,並把 `community` 寫進頂點屬性。"""
+def detect_communities(
+    graph: ig.Graph, trials: int = 5, seed: int | None = DEFAULT_SEED
+) -> CommunityDetection:
+    """跑 Infomap(igraph 內建)兩層社群偵測,並把 `community` 寫進頂點屬性。
+
+    Infomap 是隨機演算法,同一張圖跑兩次會給出不同的社群數與編號。對一條會定期重算、
+    而且社群編號會寫進資料庫的 pipeline 來說,這代表每次重算都會讓社群「換號碼」。
+    所以預設固定亂數種子;要看結果穩不穩定時傳 `seed=None` 讓它隨機。
+    """
+    if seed is not None:
+        ig.set_random_number_generator(random.Random(seed))
     if graph.vcount() == 0:
         graph.vs["community"] = []
         return CommunityDetection(membership=[], codelength=0.0)
@@ -196,7 +209,8 @@ def build_community_relation(graph: ig.Graph, specials: list[SpecialNodes]) -> i
     頂點:每個有效社群的四個特殊節點。只有 `bridge` 之間有邊 —— 社群與社群的關係由
     bridge 代表;其餘三個角色是同一個社群的補充資訊,沿用該社群 bridge 的 flow/betweenness。
 
-    頂點屬性:`idx`、`community`、`role`、`title`、`title_display`、`flow`、`betweenness`
+    頂點屬性:`idx`、`community`、`roles`(逗號分隔,一個節點可能同時是好幾個角色)、
+    `title`、`title_display`、`flow`、`betweenness`
     邊屬性:`source_idx`、`target_idx`、`connections_num`、`distance`、`betweenness`
         - `connections_num`:兩個社群之間實際的連結數(邊粗細)
         - `distance`:兩個社群 center 節點在全圖上的最短路徑長度(跳數)
@@ -217,7 +231,7 @@ def build_community_relation(graph: ig.Graph, specials: list[SpecialNodes]) -> i
     relation.add_vertices(len(bridge_specials))
     relation.vs["idx"] = [item.roles["bridge"] for item in bridge_specials]
     relation.vs["community"] = [item.community for item in bridge_specials]
-    relation.vs["role"] = ["bridge"] * len(bridge_specials)
+    relation.vs["roles"] = ["bridge"] * len(bridge_specials)  # 稍後合併同一節點的其他角色
     relation.vs["title"] = [titles[by_idx[item.roles["bridge"]]] for item in bridge_specials]
     relation.vs["title_display"] = [
         display_titles[by_idx[item.roles["bridge"]]] for item in bridge_specials
@@ -262,22 +276,28 @@ def build_community_relation(graph: ig.Graph, specials: list[SpecialNodes]) -> i
         relation.vs["flow"] = [1.0 / relation.vcount()] * relation.vcount()
         relation.vs["betweenness"] = [0.0] * relation.vcount()
 
-    # --- 其餘三個角色:同社群的補充節點,沿用 bridge 的 flow/betweenness ---
+    # --- 其餘角色:同社群的補充節點,沿用 bridge 的 flow/betweenness ---
+    # 一個條目常常同時是好幾個角色(例如社群裡最大的節點同時是 hub 與 center),
+    # 一個 idx 只建一個頂點,角色合併寫在 `roles` 裡,否則前端會畫出重複的節點。
     extra_attrs: list[dict[str, object]] = []
     for item in bridge_specials:
         bridge_row = row_of_community[item.community]
+        bridge_idx = item.roles["bridge"]
+        roles_by_idx: dict[int, list[str]] = {}
         for role in ROLES:
-            if role == "bridge":
-                continue
             idx = item.roles.get(role)
-            if idx is None or idx == item.roles["bridge"]:
-                # 同一個節點同時是 bridge 又是別的角色時不重複建點
+            if idx is not None:
+                roles_by_idx.setdefault(idx, []).append(role)
+
+        relation.vs[bridge_row]["roles"] = ",".join(roles_by_idx.get(bridge_idx, ["bridge"]))
+        for idx, roles in roles_by_idx.items():
+            if idx == bridge_idx:
                 continue
             extra_attrs.append(
                 {
                     "idx": idx,
                     "community": item.community,
-                    "role": role,
+                    "roles": ",".join(roles),
                     "title": titles[by_idx[idx]],
                     "title_display": display_titles[by_idx[idx]],
                     "flow": relation.vs[bridge_row]["flow"],

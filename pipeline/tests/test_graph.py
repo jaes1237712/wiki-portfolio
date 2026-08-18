@@ -129,6 +129,14 @@ def test_detect_communities_finds_the_two_clusters(graph) -> None:
     assert result.community_sizes == {by_idx[1]: 5, by_idx[6]: 5}
 
 
+def test_detect_communities_is_reproducible_with_fixed_seed(graph) -> None:
+    """Infomap 是隨機演算法;固定種子後同一張圖必須給出同一組社群編號,
+    否則每次重算都會讓資料庫裡的社群編號整批洗掉。"""
+    first = detect_communities(graph, trials=5)
+    second = detect_communities(graph, trials=5)
+    assert first.membership == second.membership
+
+
 def test_detect_communities_requires_weights() -> None:
     g = build_graph(_records())
     with pytest.raises(ValueError, match="assign_topology_weights"):
@@ -191,7 +199,7 @@ def test_community_relation_graph_structure(graph, config) -> None:
     specials = mark_special_nodes(graph, subgraphs)
     relation = build_community_relation(graph, specials)
 
-    bridges = [v for v in relation.vs if v["role"] == "bridge"]
+    bridges = [v for v in relation.vs if "bridge" in v["roles"].split(",")]
     assert len(bridges) == 2
     assert {v["idx"] for v in bridges} == {5, 6}
 
@@ -203,9 +211,13 @@ def test_community_relation_graph_structure(graph, config) -> None:
         assert edge["betweenness"] is not None
 
     # 其餘角色也在圖上,且沿用同社群 bridge 的 flow
-    roles = {v["role"] for v in relation.vs}
+    roles = {role for v in relation.vs for role in v["roles"].split(",")}
     assert roles <= set(ROLES)
     assert all(v["flow"] is not None for v in relation.vs)
+
+    # 一個條目只會有一個頂點,即使它同時是 hub 與 center
+    idx_values = [v["idx"] for v in relation.vs]
+    assert len(idx_values) == len(set(idx_values))
 
 
 def test_community_relation_is_empty_without_specials(graph) -> None:

@@ -80,7 +80,7 @@ cp packages/db-schema/.env.example packages/db-schema/.env   # 填 Neon dev bran
 |---|---|---|
 | 0 | Repo 骨架、npm workspaces、shared-types、db-schema | ✅ 完成(Neon 專案尚未開) |
 | 1 | Pipeline:爬蟲 + 原始連結圖(BFS + SQLite checkpoint + 20 個測試) | 🟡 核心完成 |
-| 2 | Pipeline:建圖 + 邊權重 + 兩層社群偵測(35 個測試) | ✅ 完成 |
+| 2 | Pipeline:建圖 + 邊權重 + 兩層社群偵測(36 個測試) | ✅ 完成 |
 | 3 | Pipeline:Workers AI embedding | ⬜ 未開始 |
 | 4 | Pipeline:寫入 Neon(**里程碑**,解鎖 5/6 平行開發) | ⬜ 未開始 |
 | 5 | 後端 Worker(Hono) | ⬜ 未開始 |
@@ -103,6 +103,9 @@ cp packages/db-schema/.env.example packages/db-schema/.env   # 填 Neon dev bran
 `communities.py`(igraph 內建 Infomap 兩層社群、有效子圖、hub/authority/center/bridge
 特殊節點、社群關係 meta-graph)、`stages.py`(階段串接 + GraphML/JSON 中繼產物)。
 CLI:`pipeline run-stage graph` 與 `run-stage communities`。
+實測(dev 種子 depth 2):13,085 節點 / 47,391 邊,爬取 78 秒;37 個社群、18 個有效社群、
+meta-graph 43 頂點 / 85 邊。分群結果合理(線性代數↔行列式、群論↔抽象代數、
+戴克斯特拉演算法↔最小生成樹)。**社群偵測固定亂數種子**,否則每次重算社群編號都會變。
 
 **Phase 1 還沒做:** 條目簡介批次落庫(`fetch_extracts` 已寫好但還沒接成 stage)、瀏覽量抓取
 (日 + 半月兩種 granularity)。
