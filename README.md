@@ -9,10 +9,8 @@ Python 批次 pipeline  →  Neon (Postgres + pgvector)  →  Cloudflare Worker 
 
 ## 狀態
 
-https://github.com/jaes1237712/wiki-portfolio
-
-
-開發中(Phase 0 完成:monorepo 骨架、共用型別、資料庫 schema)。
+開發中。Phase 0(monorepo 骨架、共用型別、Neon schema)與 Phase 1(爬蟲 + 可續傳
+checkpoint)已完成;接下來是 Phase 2 建圖 + 社群偵測。
 進度與開發指南見 [CLAUDE.md](CLAUDE.md),完整計畫見 [docs/roadmap.md](docs/roadmap.md)。
 
 ## 快速開始
