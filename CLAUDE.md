@@ -15,6 +15,20 @@
 
 完整分階段計畫見 [docs/roadmap.md](docs/roadmap.md)。
 
+> ⚠️ **2026-08-19:資料獲取策略正在重新設計中,先讀
+> [docs/data-strategy.md](docs/data-strategy.md)。**
+>
+> 那份文件記錄了一次長討論的結果,其中包含一個會影響 Phase 3-8 的發現:
+> **目前這張 13,085 節點的圖,封閉度只有 2.4%**(只有 314 個節點被展開過),
+> 導致 hub/authority/bridge 這些角色指標實際上在測爬蟲軌跡而不是維基百科結構。
+>
+> 提議的方向是從「一張扁平大圖」改成「多個封閉的精緻小圖 + 推導出來的主題地圖」。
+> **那些提議尚未定案**,文件裡每一節都有 [實測]/[提議]/[待驗]/[待決] 標記,
+> 不要把 [提議] 當成已定案。已定案的東西才會進 decisions.md。
+>
+> 這個專案同時是**科學項目、工程項目、產品設計項目**,三個面向會互相推翻對方的
+> 結論 —— 發生衝突時要記錄下來,不要偷偷選一個。
+
 ## 技術棧(已定案,不要重新討論)
 
 | 層面 | 選擇 |
@@ -43,9 +57,11 @@ wiki-portfolio/
 │   └── db-schema/      # ✅ Drizzle schema + embedding 模型設定
 ├── pipeline/           # 🚧 Python 離線 pipeline(骨架完成,階段實作見 Phase 1-4)
 │   ├── wiki_pipeline/
+│   ├── experiments/    # ✅ 探索性實驗腳本(data-strategy.md 的數字都是這裡跑的)
 │   └── tests/
 ├── docs/
 │   ├── roadmap.md      # 完整分階段計畫
+│   ├── data-strategy.md # 🔴 資料獲取/邊界/儲存策略(進行中,先讀這份)
 │   ├── decisions.md    # 決策紀錄 + 待決事項
 │   └── legacy/         # 舊專案參考程式碼(唯讀)
 └── .github/workflows/  # 重量重算排程(Phase 10)
@@ -82,11 +98,11 @@ cp packages/db-schema/.env.example packages/db-schema/.env   # 填 Neon dev bran
 | 1 | Pipeline:爬蟲 + 連結圖 + 條目簡介 + 每日瀏覽量 | ✅ 完成 |
 | 2 | Pipeline:建圖 + 邊權重 + 兩層社群偵測(36 個測試) | ✅ 完成 |
 | 3 | Pipeline:Workers AI embedding | ⬜ 未開始 |
-| 4 | Pipeline:寫入 Neon(**里程碑**,解鎖 5/6 平行開發) | ⬜ 未開始 |
+| 4 | Pipeline:寫入 Neon(**里程碑**,解鎖 5/6 平行開發) | ⬜ 未開始 ⚠️ schema 會改,見 data-strategy.md |
 | 5 | 後端 Worker(Hono) | ⬜ 未開始 |
 | 6 | 前端 React app | ⬜ 未開始 |
 | 7 | 小型資料集整合測試 | ⬜ 未開始 |
-| 8 | 全規模 pipeline 執行(真實主題) | ⬜ 未開始 |
+| 8 | 全規模 pipeline 執行(真實主題) | ⬜ 未開始 ⚠️ 爬取策略重新設計中 |
 | 9 | 部署 | ⬜ 未開始 |
 | 10 | 排程重算 | ⬜ 未開始 |
 | 11 | 作品集包裝(首頁) | ⬜ 未開始 |
@@ -121,8 +137,22 @@ meta-graph 43 頂點 / 85 邊。分群結果合理(線性代數↔行列式、�
 **Git 狀態:** 公開 repo → https://github.com/jaes1237712/wiki-portfolio
 (main branch,remote 走 SSH)。換裝置直接 `git clone git@github.com:jaes1237712/wiki-portfolio.git`。
 
-**下一步:** 開 Neon 專案 + `dev` branch → `npm run db:push`;
-或直接接 Phase 2(建圖 + 邊權重 + 兩層社群偵測,不需要任何雲端帳號)。
+## 下一步(2026-08-19 更新)
+
+**不要直接開始寫 Phase 3。** 先讀 [docs/data-strategy.md](docs/data-strategy.md),
+因為那裡的發現會改變 Phase 3-8 要抓什麼資料、寫什麼進 Neon。
+
+按優先序:
+
+1. **實驗 1(data-strategy.md 第 7 節)—— 主題邊界會落在哪裡。**
+   展開入度 ≥ 5 的 2,165 個候選(約 2,200 個請求,背景 15-20 分鐘),對「圖論」單一種子
+   跑 PPR + conductance sweep。**這個實驗會驗證整個「精緻小圖」設計的前提** ——
+   如果 φ 曲線平坦、沒有明顯最小值,設計就要重新想。**使用者已同意方向,但還沒開跑。**
+2. **回答待決事項 J/K/L/M**(主題怎麼選、能不能重疊、幾個、保險絲設多少)—— 產品決策。
+3. Phase 3 embedding(需要 Cloudflare 帳號 + 先跑實驗 4 量 Neuron 消耗)。
+4. Phase 4 寫入 Neon(需要 Neon 專案;schema 會因三層架構而改,見 data-strategy.md 第 9 節)。
+
+不需要雲端帳號就能做的:Phase 5 的純函式(異常偵測、線性回歸的 TS 移植 + vitest)。
 
 ## 開發慣例
 
