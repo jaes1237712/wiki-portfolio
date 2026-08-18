@@ -271,6 +271,11 @@ class StateStore:
         row = self.conn.execute("SELECT extract FROM extracts WHERE idx = ?", (idx,)).fetchone()
         return None if row is None else row["extract"]
 
+    def clear_missing_extracts(self) -> int:
+        """把「問過但沒拿到簡介」的紀錄刪掉,讓下次重抓。抓取邏輯修好後用得到。"""
+        cur = self.conn.execute("DELETE FROM extracts WHERE extract IS NULL")
+        return cur.rowcount
+
     def missing_extracts(self) -> list[tuple[int, str]]:
         rows = self.conn.execute(
             "SELECT a.idx, a.title FROM articles a "

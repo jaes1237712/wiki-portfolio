@@ -192,3 +192,39 @@ def test_extracts_stage_marks_missing_articles(store: StateStore, tmp_path) -> N
     calls = route.call_count
     assert asyncio.run(run_extracts_stage(config)).total == 0
     assert route.call_count == calls  # 查不到的條目也不會再問一次
+
+
+@respx.mock
+def test_fetch_extracts_rejects_oversized_batch() -> None:
+    """TextExtracts 一次只回 20 筆,而且超過的部分不會報錯、只會靜靜地沒有 extract ——
+    所以呼叫端一次丟超過 20 個標題必須當場擋下來,不然會靜默漏資料。"""
+
+    async def main():
+        async with WikiClient(concurrency=1) as client:
+            await client.fetch_extracts([f"條目{i}" for i in range(21)])
+
+    with pytest.raises(ValueError, match="20"):
+        asyncio.run(main())
+
+
+@respx.mock
+def test_extracts_retry_missing_refetches_null_rows(store: StateStore, tmp_path) -> None:
+    config = _config(tmp_path)
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        # 第一次都查不到,第二次才回資料(模擬抓取邏輯修好後重抓)
+        if calls["n"] == 1:
+            return httpx.Response(200, json={"query": {"pages": []}})
+        return httpx.Response(
+            200, json={"query": {"pages": [{"title": "图论", "extract": "圖論簡介"}]}}
+        )
+
+    respx.get(WIKI_API).mock(side_effect=handler)
+    assert asyncio.run(run_extracts_stage(config)).missing == 2
+    assert asyncio.run(run_extracts_stage(config)).total == 0  # 預設不會重問
+
+    again = asyncio.run(run_extracts_stage(config, retry_missing=True))
+    assert again.total == 2
+    assert store.get_extract(store.get_idx("图论")) == "圖論簡介"

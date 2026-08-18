@@ -54,6 +54,7 @@ def run_stage(
     depth: int = typer.Option(None, help="要展開的層數"),
     concurrency: int = typer.Option(None, help="同時發出的請求數上限"),
     limit: int = typer.Option(None, help="只處理前 N 個條目(pageviews 階段試跑用)"),
+    retry_missing: bool = typer.Option(False, help="extracts 階段:重抓上次「查不到」的條目"),
     verbose: bool = typer.Option(True, help="顯示進度 log"),
 ) -> None:
     """執行單一階段。"""
@@ -78,7 +79,7 @@ def run_stage(
         return
 
     if stage == "extracts":
-        stats = asyncio.run(run_extracts_stage(conf))
+        stats = asyncio.run(run_extracts_stage(conf, retry_missing=retry_missing))
         typer.echo(
             f"完成:{stats.fetched} 個條目有簡介,{stats.missing} 個查不到"
             f"(共處理 {stats.total} 個)"

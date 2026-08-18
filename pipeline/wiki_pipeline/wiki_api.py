@@ -25,6 +25,11 @@ EXCLUDED_PREFIXES = (
 )
 
 
+#: MediaWiki 的 TextExtracts 每個請求最多只回 20 筆 extract —— 實測不管 `exlimit` 給多少
+#: 都一樣(一次丟 50 個標題只會拿回 20 筆,其餘靜靜地沒有 extract 欄位,不會報錯)。
+EXTRACTS_BATCH_LIMIT = 20
+
+
 def is_article_title(title: str) -> bool:
     return not title.startswith(EXCLUDED_PREFIXES)
 
@@ -254,11 +259,14 @@ class WikiClient:
     # --- 條目簡介 ---------------------------------------------------------
 
     async def fetch_extracts(self, titles: list[str]) -> dict[str, str]:
-        """批次取得條目導言(純文字)。API 上限一次 50 個標題。"""
+        """批次取得條目導言(純文字)。一次最多 `EXTRACTS_BATCH_LIMIT` 個標題。"""
         if not titles:
             return {}
-        if len(titles) > 50:
-            raise ValueError("一次最多 50 個標題(MediaWiki API 限制)")
+        if len(titles) > EXTRACTS_BATCH_LIMIT:
+            raise ValueError(
+                f"一次最多 {EXTRACTS_BATCH_LIMIT} 個標題(TextExtracts 限制,"
+                "超過的部分不會報錯、只會靜靜地沒有 extract)"
+            )
 
         data = await self._get(
             {
@@ -267,6 +275,7 @@ class WikiClient:
                 "formatversion": 2,
                 "titles": "|".join(titles),
                 "prop": "extracts",
+                "exlimit": EXTRACTS_BATCH_LIMIT,
                 "exintro": 1,
                 "explaintext": 1,
                 "redirects": 1,

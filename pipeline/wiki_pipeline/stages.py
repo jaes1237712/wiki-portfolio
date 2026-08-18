@@ -35,7 +35,7 @@ from .communities import (
 )
 from .config import PipelineConfig
 from .pageviews import average_pageviews, to_half_month
-from .wiki_api import WikiApiError, WikiClient
+from .wiki_api import EXTRACTS_BATCH_LIMIT, WikiApiError, WikiClient
 from .graph_build import build_graph_from_store, load_records, build_graph
 from .state import StateStore
 from .weighting import assign_topology_weights
@@ -157,7 +157,11 @@ class ExtractsStats:
     total: int = 0
 
 
-async def run_extracts_stage(config: PipelineConfig, batch_size: int = 50) -> ExtractsStats:
+async def run_extracts_stage(
+    config: PipelineConfig,
+    batch_size: int = EXTRACTS_BATCH_LIMIT,
+    retry_missing: bool = False,
+) -> ExtractsStats:
     """抓所有條目的導言文字(Phase 3 的 embedding 與前端的詳情面板都要用)。
 
     可續傳:只抓 `extracts` 表裡還沒有的條目。查不到簡介的條目會寫入 NULL,
@@ -165,13 +169,17 @@ async def run_extracts_stage(config: PipelineConfig, batch_size: int = 50) -> Ex
     """
     stats = ExtractsStats()
     with StateStore(config.state_dir / "pipeline.sqlite") as store:
+        if retry_missing:
+            with store.transaction():
+                cleared = store.clear_missing_extracts()
+            log.info("把 %d 個「查不到簡介」的條目放回待抓", cleared)
         pending = store.missing_extracts()
         stats.total = len(pending)
         if not pending:
             log.info("所有條目都已經有簡介了")
             return stats
 
-        # 每批 50 個標題(API 上限),再讓多批同時飛,否則 13,000 個條目要跑十幾分鐘
+        # 每批 20 個標題(TextExtracts 上限),再讓多批同時飛
         batches = [pending[i : i + batch_size] for i in range(0, len(pending), batch_size)]
         group_size = config.crawl.concurrency
         async with WikiClient(concurrency=config.crawl.concurrency) as client:
