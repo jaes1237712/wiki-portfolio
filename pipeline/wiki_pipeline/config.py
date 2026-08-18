@@ -76,7 +76,8 @@ class PageviewsConfig:
     days: int = 365
     # Pageviews API 的資料大約落後一天,所以預設不抓到今天。
     lag_days: int = 2
-    # 一次同時抓幾個條目
+    # 一次同時抓幾個條目。實測:6 個併發跑 100 個條目 0 失敗;開到 12 個併發跑大量條目時
+    # 會被限流,約 10% 的條目重試 4 次後仍失敗(續跑時會自動重抓)。
     concurrency: int = 6
 
     def date_range(self, today: date | None = None) -> tuple[str, str]:

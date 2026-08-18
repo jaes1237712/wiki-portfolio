@@ -34,6 +34,17 @@ def is_article_title(title: str) -> bool:
     return not title.startswith(EXCLUDED_PREFIXES)
 
 
+def _retry_after_seconds(response: httpx.Response) -> float | None:
+    """被限流時,伺服器說要等多久就等多久(有給 Retry-After 的話)。"""
+    value = response.headers.get("retry-after")
+    if not value:
+        return None
+    try:
+        return min(float(value), 60.0)
+    except ValueError:
+        return None
+
+
 @dataclass
 class LinksResult:
     """一個條目的外連結果。"""
@@ -94,6 +105,7 @@ class WikiClient:
 
     async def _get(self, params: dict[str, object]) -> dict:
         last_error: Exception | None = None
+        retry_after: float | None = None
         for attempt in range(self.max_retries):
             async with self._sem:
                 try:
@@ -232,6 +244,7 @@ class WikiClient:
         url = f"{cfg.PAGEVIEWS_API_URL}/{path}"
 
         last_error: Exception | None = None
+        retry_after: float | None = None
         for attempt in range(self.max_retries):
             async with self._sem:
                 try:
@@ -253,8 +266,10 @@ class WikiClient:
                     if resp.status_code not in (429, 500, 502, 503, 504):
                         raise WikiApiError(f"HTTP {resp.status_code}: {resp.text[:200]}")
                     last_error = WikiApiError(f"HTTP {resp.status_code}")
-            await asyncio.sleep(min(2**attempt, 30) * (0.5 + random.random()))
-        raise WikiApiError(f"{self.max_retries} 次重試後仍失敗") from last_error
+                    retry_after = _retry_after_seconds(resp)
+            await asyncio.sleep(retry_after or min(2**attempt, 30) * (0.5 + random.random()))
+            retry_after = None
+        raise WikiApiError(f"{self.max_retries} 次重試後仍失敗(最後:{last_error})") from last_error
 
     # --- 條目簡介 ---------------------------------------------------------
 

@@ -247,6 +247,7 @@ async def run_pageviews_stage(
                     for (idx, title), result in zip(batch, results, strict=True):
                         if isinstance(result, BaseException):
                             if isinstance(result, (WikiApiError, OSError)):
+                                log.warning("抓 %s 的瀏覽量失敗(續跑會重試):%s", title, result)
                                 store.mark_pageviews_failed(idx, start_date, end_date, str(result))
                                 stats.failed += 1
                                 continue
