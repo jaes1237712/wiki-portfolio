@@ -78,6 +78,12 @@ wiki-portfolio/                      # 新 repo,npm workspaces(package.json 的 
 `min_node_num`/`max_node_num`(預設 50-500)的過濾閾值在小型測試種子規模下會濾掉所有社群,需要參數化並在測試情境下調低。
 
 ### Phase 3 — Pipeline:Embedding(全新階段)
+
+> ⚠️ **2026-08-19 更新:這個階段的定位被降級了。** 決策 23 把 embedding 限縮成
+> 「語意搜尋 + 節點特徵」,決策 24 把語意搜尋降為加分項。**執行順序傾向改到 Phase 4 之後**
+> (待決 N,尚未定案)。另外舊版寫「舊 schema 寫死 1024 對應 `multilingual-e5-large-instruct`」——
+> 現在暫定的 `@cf/baai/bge-m3` 剛好也是 1024 維(決策 7),而且可能改用 `halfvec`
+> (data-strategy.md 4.3,需先跑實驗 3 量 recall 損失)。
 舊版 `analyze.py` import 了 `SentenceTransformer` 但從未呼叫——這階段完全要重新寫。改用 Cloudflare Workers AI 的 REST embedding endpoint(而非本地 `transformers`/`sentence-transformers`),因為查詢與段落 embedding 必須共用同一個模型/向量空間,唯一能保證這件事的方法就是離線 pipeline 與線上 Worker 呼叫同一個 Workers AI 模型。現在就要選定模型(例如 `@cf/baai/bge-*` 系列)並記錄輸出維度——這會直接決定 `packages/db-schema` 裡 `vector(dimensions)` 欄位寬度(舊 schema 寫死 1024 對應 `multilingual-e5-large-instruct`,新模型維度很可能不同)。文字來源沿用 `build_data.py` 的 `get_articles_extracts`。
 
 ### Phase 4 — Pipeline:匯出/寫入 Neon(小型測試種子)— **里程碑**

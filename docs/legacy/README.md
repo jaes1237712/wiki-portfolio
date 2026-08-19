@@ -20,6 +20,13 @@
 
 ## 已知的坑
 
+- **舊版從未用 embedding 相似度當邊權重**(2026-08-19 查證,已對照本機原始檔,兩份一致)。
+  `analyze.py` 的 `WikiNetwork.__init__` 有 `embeddings_dict` / `indices_embeddings` 兩個屬性,
+  但全檔沒有任何地方賦值或使用它們;`build_data.py` 連 "embed" 字樣都沒有。唯一真正跑邊權重的
+  是 `config_weight_topology` → `get_similarity_topology`(純拓樸)。舊專案唯一用到 embedding
+  的地方是 `web_wiki/vector.py` 的語意搜尋,跟建圖是兩條不相干的路徑。
+  → 如果之後又想找「當初那個 embedding 加權實驗」,不用再找了,程式碼已經被刪掉。
+  這件事現在是定案的設計方向,見 [../decisions.md](../decisions.md) 決策 23。
 - `analyze.py` 的 `graph_utils` 不是外部模組,是同檔 730 行的 class;
   `get_similarity_topology` 在 968 行(**非對稱**相似度:`|common| / |neighbors2|`,移植時保留原行為)。
 - `build_data.py` 把屬性直接掛在 `time` 模組上(`time.start` / `time.end` / `time.diff`),
